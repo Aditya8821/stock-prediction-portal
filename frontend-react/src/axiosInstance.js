@@ -1,7 +1,8 @@
 import axios from "axios";
 
 
-const baseURL = import.meta.env.VITE_BACKEND_BASE_API
+// Use environment variable if available, otherwise fallback to a default URL
+const baseURL = import.meta.env.VITE_BACKEND_BASE_API || 'http://127.0.0.1:8000/api/v1'
 const axiosInstance = axios.create({
     baseURL: baseURL,
     headers: {
@@ -31,19 +32,24 @@ axiosInstance.interceptors.response.use(
     },
     // Handle failed responses
     async function(error){
-        const originalRequest = error.config;
-        if(error.response.status === 401 && !originalRequest.retry){
-            originalRequest.retry = true;
-            const refreshToken = localStorage.getItem('refreshToken')
-            try{
-                const response = await axiosInstance.post('/token/refresh/', {refresh: refreshToken})
-                localStorage.setItem('accessToken', response.data.access)
-                originalRequest.headers['Authorization'] = `Bearer ${response.data.access}`
-                return axiosInstance(originalRequest)
-            }catch(error){
-                localStorage.removeItem('accessToken')
-                localStorage.removeItem('refreshToken')
+        try {
+            const originalRequest = error.config;
+            // Check if error.response exists before accessing its properties
+            if(error.response && error.response.status === 401 && !originalRequest.retry){
+                originalRequest.retry = true;
+                const refreshToken = localStorage.getItem('refreshToken')
+                try{
+                    const response = await axiosInstance.post('/token/refresh/', {refresh: refreshToken})
+                    localStorage.setItem('accessToken', response.data.access)
+                    originalRequest.headers['Authorization'] = `Bearer ${response.data.access}`
+                    return axiosInstance(originalRequest)
+                }catch(refreshError){
+                    localStorage.removeItem('accessToken')
+                    localStorage.removeItem('refreshToken')
+                }
             }
+        } catch (interceptorError) {
+            console.error('Error in response interceptor:', interceptorError);
         }
         return Promise.reject(error);
     }

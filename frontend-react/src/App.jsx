@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import './assets/css/style.css'
-import Main from './components/Main'
+import Main from './components/main'
 import Register from './components/Register'
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 import Header from './components/Header'
