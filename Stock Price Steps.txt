@@ -1,0 +1,1045 @@
+1. Create a folder
+2. python -m venv env
+   activate the env
+3. pip install django
+4. django-admin startproject django_rest_main .
+5. pip install djangorestframework
+   add 'rest_framework' under installed apps in settings.py
+6. python manage.py runserver
+
+---Webapp endpoint---
+7. python manage.py startapp students
+8. add 'students' under installed apps in settings.py
+9. add path('students/', include('students.urls')) in urlpatterns in urls.py
+10. Create urls.py inside students
+     
+     from django.urls import path
+     from . import views
+
+     urlpatterns = [
+         path('',views.students)
+     ]
+
+11. In views.py
+
+from django.shortcuts import render
+from django.http import HttpResponse
+
+# Create your views here.
+
+def students(request):
+    return HttpResponse('<h1>Hello World</h1>')
+
+
+---Simple API endpoint
+12. python manage.py startapp api
+
+13. add 'api' under installed apps in settings.py
+
+14. add this path('api/v1/', include('api.urls')) in urls.py
+
+15. Create urls.py in api
+
+from django.urls import path, include
+from . import views
+
+urlpatterns = [
+    path('students/', views.studentsView)
+]
+
+
+16. In views.py
+from django.shortcuts import render
+from django.http import JsonResponse
+
+# Create your views here.
+
+def studentsView(request):
+    student={
+            'id':2,
+            'name':"Satyam"
+        }
+    return JsonResponse(student)
+
+
+
+17. python manage.py runserver
+
+
+
+---Create Model---
+18. python manage.py migrate
+19. python manage.py createsuperuser
+    username- admin
+    email- skip
+    pass- admin
+20. python manage.py runserver
+    go to- http://127.0.0.1:8000/admin
+    Enter username and pass there i.e admin
+
+21. In models.py of students
+from django.db import models
+
+# Create your models here.
+class Student(models.Model):
+    student_id=models.CharField(max_length=50)
+    name=models.CharField(max_length=50)
+    branch=models.CharField(max_length=50)
+    
+    def __str__(self):
+        return self.name
+
+
+22. In admin.py of students
+
+from django.contrib import admin
+from .models import Student
+# Register your models here.
+admin.site.register(Student)
+
+
+23. python manage.py makemigrations
+24. python manage.py migrate
+25. python manage.py runserver
+    go to-> http://127.0.0.1:8000/admin
+    
+    You will see students column, add some students info there
+
+---Manual Serialization---
+
+As of now we are checking the static data in this url: http://127.0.0.1:8000/api/v1/students but now we will check the dynamic data.
+
+To check for those dynamic added students using this http://127.0.0.1:8000/api/v1/students endpoint
+
+26. In views.py of api
+from django.shortcuts import render
+from django.http import JsonResponse
+from students.models import Student
+
+# Create your views here.
+
+def studentsView(request):
+    student= Student.objects.all()
+    student_list=list(student.values())
+    return JsonResponse(student_list, safe=False)
+
+
+---Serializers---
+
+Taking query set and converting it to a list can be our temporary solution, we will need a powerful tool to serialize the complex data, this is where the serializers comes in.
+
+
+Serializers is a process of converting model format from query set to Json format or any other format that client requires. Think of it as a translator of the data. This is important because in real websites too there is a very frequent back and forth data transfer between client & server. So serializers automatically handles all of this. There are many different type of serializers, most common one is model serializer.
+
+Similarly deserializers is a vice versa process.
+
+27. Create serializers.py file in api
+
+from rest_framework import serializers
+from students.models import Student
+
+def StudentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=Student
+        fields="__all__"
+
+28. views.py in api
+
+from student.models import Student
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .serializers import StudentSerializer
+from rest_framwork import status
+
+@api_view(["GET"])
+def studentsView(request):
+    if request.method="GET":
+        student=Student.objects.all()
+        serialized=StudentSerializer(student, many=True)
+        return Response(serialized.data, status=status.HTTP_200_OK)
+
+
+
+29. ---Storing Data using Serializers---
+
+Now we will store the data using serializers using POST method
+
+Add this inside views.py in api
+
+from student.models import Student
+from .serializers import StudentSerializer
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.decorators import api_view
+
+@api_view(["GET","POST"])
+def studentsView(request):
+    if request.method=="GET":
+        student=Student.objects.all()
+        serialized=StudentSerializer(student, many=True)
+        return Response(serialized.data, status=status.HTTP_200_OK)
+    
+    if request.method=="POST":
+        serializer=StudentSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+Now go to http://127.0.0.1:8000/api/v1/students/ and scroll down there you will see the empty column there you can add the new data and post it.
+
+Example-
+{
+    "id": 3,
+    "student_id": "2222",
+    "name": "Aditya",
+    "branch": "ME"
+}
+
+
+30. ---GET a single object Primary Key based Operation---
+
+Now we will extract the detail of any one student using PK
+
+Add this in views.py of api
+
+
+.
+.
+.
+
+@api_view(["GET"])
+def studentDetailView(request, pk):
+    try:
+        student=Student.object.get(pk=pk)
+    except Student.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request=="GET":
+        serializer=StudentSerializer(student)
+        return Response(serializer.data, status=status.HTPP_200_OK)
+
+
+-----
+Add this new path in urls.py of api
+
+path('student/<int:pk>', views.studentDetailView)
+
+----
+Now go to this url:
+
+http://127.0.0.1:8000/api/v1/student/2
+
+You will see the student detail with ID 2
+
+
+
+
+31. ---Update operation on Student---
+
+Now we will try to update the student detail using put request
+
+Add this in views.py of api
+
+.
+.
+.
+@api_view(["GET","PUT"])
+def studentDetailView(request, pk):
+.
+.
+.
+    if request.method=="PUT":
+        serializer=StudentSerializer(student, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+32. ---Delete Operation---
+
+Now we will delete a particular student
+
+.
+.
+.
+@api_view(["GET","PUT", "DELETE"])
+def studentDetailView(request,pk):
+.
+.
+.
+    if request.method=="DELETE":
+        student.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+------------------------------------------------------------------------
+
+33. ---Class based views---
+
+Class based vews provide more structred and organized way to handle requests using Object-oriented principles.
+
+Till now you saw that in function based views we have to write multiple lines of code to perfroma these CRUD operations(GET, PUT, POST, DELETE). But with this class based views the number of lines of code will be reduced.
+
+34. ---Employee Model---
+
+python manage.py startapp Employees
+
+
+# Add Employees in the installed app in settings.py
+
+
+# In models.py of Employees
+
+from djangp.db import models
+
+class Employee(models.Model):
+    emp_id=models.CharField(max_lenght=50)
+    emp_name=models.CharField(max_lenght=50)
+    designation=models.CharField(max_lenght=50)
+
+    def __str__(self):
+        return self.emp_name
+
+# In admin.py of Employees
+
+from django.contrib import admin
+from .model import Employee
+
+admin.site.register(Employee)
+
+
+----------------------
+35. ---Employee Serializer---
+
+# Add this in serializers.py in api
+
+.
+.
+.
+from employees.models import Employee
+
+.
+.
+.
+class EmployeeSerializer(models.ModelSerializer):
+    class Meta:
+        model=Employee
+        fields="__all__"
+
+
+
+36. ---Class Based View Get all Employees---
+
+# Add this to urls.py of api
+
+path('employees/', views.Employees.as_view())
+
+
+# Add this to views.py of api
+.
+.
+.
+from rest_framework.views import APIView
+from .serializers import EmployeeSerializer
+from employees.models import Employee
+.
+.
+class Employees(APIView):
+    def get(self, request):
+        employee=Employee.objects.all()
+        serializer=EmployeeSerializer(employee, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+-----
+Now go to http://127.0.0.8000/api/v1/employees/
+
+
+
+37. ---Class based Creating Employee---
+
+.
+.
+.
+class Employees(APIView):
+    .
+    .
+    .
+    def post(self, request):
+        serializer=EmployeeSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+38. ---Getting Single Object---
+
+# Add this in url patterns of urls.py of api
+.
+.
+.
+path('employees/<int:pk>', views.EmployeeDetail.as_view())
+
+
+# Add this in views.py of api
+
+.
+.
+.
+from django.http import Http404
+.
+.
+.
+class EmployeeDetail(APIView):
+    def get_object(self, pk):
+        try:
+            return Employee.objects.get(pk=pk)
+        except Employee.DoesNotExist:
+            raise Http404
+    def get(self, request, pk):
+        employee=self.get_object(pk=pk)
+        serializer=EmployeeSerializer(employee)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+39. ---Update And Delete Employee---
+
+.
+.
+.
+    def put(self, request, pk):
+        employee=self.get_object(pk=pk)
+        serializer=EmployeeSerializer(employee, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def delete(self, request, pk):
+        employee=self.get_object(pk=pk)
+        employee.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+------------Mixins----------------------
+
+----What are Mixins?
+- Reusable code classes in object-oriented programming
+- Provide specific functionalities that can be added to views
+- In Django REST Framework, they add common functionality to views
+
+----CRUD Operations
+Mixins help implement the four basic operations:
+- Create - Add new data
+- Read - Get/retrieve data
+- Update - Modify existing data
+- Delete - Remove data
+
+----Common Mixins
+
+--ListModelMixin
+Provides list() method
+Used for getting multiple records (GET request)
+
+--CreateModelMixin
+Provides create() method
+Used for creating new records (POST request)
+
+--RetrieveModelMixin
+Provides retrieve() method
+Used for getting a single record (GET request)
+
+--UpdateModelMixin
+Provides update() method
+Used for updating records (PUT request)
+
+--DestroyModelMixin
+Provides destroy() method
+Used for deleting records (DELETE request)
+
+
+----How to Use
+
+GenericAPIView (needed for mixins), has built-in support for mixins, and GenericAPIView will automatically all the structured responses along with their status codes. 
+
+----Inshort
+- Request handling and response generation will be handles with this generics. 
+- Core functionality of peforming CRUD operations is handled by Mixins.
+
+--Combine mixins with generics.GenericAPIView:
+class Employees(mixins.ListModelMixin, generics.GenericAPIView):
+    def get(self, request):
+        return self.list(request)
+
+--For multiple operations:
+class Employees(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
+    queryset = Employee.objects.all()          # MUST be named 'queryset'
+    serializer_class = EmployeeSerializer     # MUST be named 'serializer_class'
+    #The mixins internally call methods like:
+        #self.get_queryset() - looks for self.queryset
+        #self.get_serializer_class() - looks for self.serializer_class
+    
+    def get(self, request):
+        return self.list(request)
+    
+    def post(self, request):
+        return self.create(request)
+
+----Key Points
+- Each mixin handles one specific operation
+- Combine multiple mixins for different functionalities
+- Always inherit from generics.GenericAPIView
+- Map HTTP methods (get, post, put, delete) to mixin methods
+
+
+
+
+40. ---List and create model mixins---
+
+#Comment out the Employees class in views.py and add this one
+
+class Employees(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
+    queryset=Employee.objects.all()
+    serializer_class=EmployeeSerializer
+
+    def get(self, request):
+        return self.list(request)
+    
+    def post(self, request):
+        return self.create(request)
+
+
+41. ---Retrieve Update Destroy Mixins---
+
+#Comment out the EmployeesDetail class in views.py and add this one
+
+class EmployeeDetail(mixins.RetrieveModelMixin, mixins.UpdateModelMixin , mixins.DestroyModelMixin, generics.GenericAPIView):
+    queryset=Employee.objects.all()
+    serializer_class=EmployeeSerializer
+
+    def get(self, request, pk):
+        return self.retrieve(request, pk)
+    
+    def put(self, request, pk):
+        return self.update(request, pk)
+    
+    def delete(self, request, pk):
+        return self.destroy(request, pk)
+
+
+
+42. ---Generics---
+
+# Comment out the Employees and EmployeesDetail class in views.py and add this one
+
+class Employees(generics.ListCreateAPIView):
+    queryset=Employee.objects.all()
+    serializer_class=EmployeeSerializer
+
+class EmployeeDetail(generics.RetrieveUpdateDestroyAPIView):
+    queryset=Employee.objects.all()
+    serializer_class=EmployeeSerializer
+    lookup_field="pk"
+
+
+#There's an option to write the separate generics too like 
+Ex- class Employees(generics.ListAPIView, generics.CreateAPIView)
+
+
+
+---------------ViewSets--------------
+ViewSets are classes that group related views together, providing a set of methods to handle different HTTP operations for a resource.
+
+
+Two Main Types:
+
+---1. viewsets.ViewSet
+	- Basic viewset class
+	- Provides standard CRUD methods:
+		list() - GET all items
+		create() - POST new item
+		retrieve() - GET single item
+		update() - PUT/PATCH existing item
+		delete() - DELETE item
+
+
+        - Requires manual implementation of each method
+
+---2. viewsets.ModelViewSet
+	- Inherits from ViewSet
+	- Auto-magic: Only needs queryset and serializer_class
+	- Automatically provides both:
+		- PK-based operations (e.g., /api/items/1/)
+		- Non-PK operations (e.g., /api/items/)
+
+
+	- All CRUD operations work out of the box
+
+
+
+43. ---List and Create Data using viewsets--- 
+    ---Retrieving Single Object---
+
+# Add this in urls.py of api
+
+.
+.
+.
+from rest_framework.routers import DefaultRouter
+
+router=DefaultRouter()
+router.register("employees", views.EmployeeViewSet, basename='employee')
+
+
+urlpatterns = [
+    path('students/', views.studentsView),
+    path('student/<int:pk>', views.studentDetailView),
+
+
+    # path('employees/', views.Employees.as_view()),
+    # path('employees/<int:pk>', views.EmployeeDetail.as_view())
+ 
+    path('', include(router.urls))
+
+
+]
+
+
+
+# Add this in views.py of api and comment the Employee & EmployeeDetail class i.e implemented using generics
+
+from rest_framework import viewsets
+from django.shortcuts import get_object_or_404
+
+
+#-----------------------ViewSet
+class EmployeeViewSet(viewsets.ViewSet):
+    def list(self, request):
+        queryset=Employee.objects.all()
+        serializer=EmployeeSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def create(self, request):
+        serializer=EmployeeSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+    def retrieve(self, request, pk=None):
+        employee=get_object_or_404(Employee, pk=pk)
+        serializer=EmployeeSerializer(employee)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def put(self, request, pk=None):
+        employee=get_object_or_404(Employee, pk=pk)
+        serializer=EmployeeSerializer(employee, data=request.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+   
+    def destroy(self, request, pk=None):
+        employee=get_object_or_404(Employee, pk=pk)
+        employee.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+
+44. ---ModelViewSets---
+
+# Add this in views.py of api and comment EmployeeViewSet class i.e implemented using ViewSet
+
+#-------------------ModelViewSet
+class EmployeeViewSet(viewsets.ModelViewSet):
+    queryset=Employee.objects.all()
+    serializer_class=EmployeeSerializer
+
+
+
+----------------------------Nested Serializers Introduction------
+
+---What are Nested Serializers?
+Nested serializers handle relationships between models by embedding one serializer inside another, allowing you to work with related data in a single API call.
+
+
+45. ---Blog and Comment model---
+
+
+# Create a Blogs app
+- python manage.py startapp Blogs
+----------
+
+# Add this in model.py of Blogs
+
+from django.db import models
+
+class Blog(models.Model):
+    blog_title=models.CharField(max_length=50)
+    blog_body=models.TextField()
+
+    def __str__(self):
+        return self.blog_title
+    
+class Comment(models.Model):
+    blog=models.ForeignKey(Blog, on_delete=models.CASCADE, related_name="comments")
+    comment=models.TextField()
+
+    def __str__(self):
+        return self.comment
+
+
+# Here on_delete means:- When a Blog is deleted, automatically delete all Comments associated with that blog.
+
+# Here related_name means:- From a Blog object, you can access all its comments using .comments
+----------------
+
+
+# Add this in admin.py of blogs
+
+from django.contrib import admin
+from .models import Blog, Comment
+# Register your models here.
+
+admin.site.register(Blog)
+admin.site.register(Comment)
+
+-----------------------------------
+
+
+46. ---Creating Serializers---
+
+# Create serializers.py inside Blogs and add this
+
+from rest_framework import serializers
+from .models import Comment, Blog
+
+class CommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=Comment
+        fields="__all__"
+
+class BlogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=Blog
+        fields="__all__"
+
+
+
+47. ---Nested Serializers implementation---
+
+# Add this in ulspatterns of urls.py of api
+
+path("blogs/", views.BlogsView.as_view()),
+path("comments/", views.CommentView.as_view())
+
+
+
+# Add this in views.py of api
+
+from Blogs.models import Blog, Comment
+from Blogs.serializers import BlogSerializer, CommentSerializer
+
+class BlogsView(generics.ListCreateAPIView):
+    queryset=Blog.objects.all()
+    serializer_class=BlogSerializer
+
+class CommentView(generics.ListCreateAPIView):
+    queryset=Comment.objects.all()
+    serializer_class=CommentSerializer 
+
+
+# Update BlogSerializer in serializers.py of Blogs
+
+class BlogSerializer(serializers.ModelSerializer):
+    comments=CommentSerializer(many=True, read_only=True)
+    class Meta:
+        model=Blog
+        fields="__all__"
+
+# This comments is that same value which we have assigned to the related_name parameter while creating class Comment in models.py of Blogs
+
+
+
+
+48. ---Primary Key based operation on Blog comment---
+
+# Add this in urlpatterns of urls.py in api
+
+path("blogs/<int:pk>", views.BlogDetailView.as_view()),
+path("comments/<int:pk>", views.CommentDetailView.as_view()) 
+
+
+# Add this in views.py of api
+
+class BlogDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset=Blog.objects.all()
+    serializer_class=BlogSerializer
+    lookup_field="pk"
+
+class CommentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset=Comment.objects.all()
+    serializer_class=CommentSerializer
+    lookup_field="pk"
+
+
+
+49.--- DRF Pagination, Filtering, Search and Ordering---
+   ---Pagination Overview---
+Pagination is used to split large datasets into smaller chunks (pages), so you don’t overload the client or server with too much data at once.
+
+-- Why Use It?
+- Improves performance
+- Reduces response size
+- Makes it easier to navigate large datasets
+
+-- Pagination Types in DRF
+- PageNumberPagination (default)
+	- Example: /?page=2
+- LimitOffsetPagination
+	- Example: /?limit=10&offset=20
+
+
+
+50. ---Global Pagination---
+
+# Add this in the last of settings.py of django_rest_main
+
+REST_FRAMEWORK={
+    "DEFAULT_PAGINATION_CLASS":"rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE":2
+}
+
+
+
+51. ---Custom Pagination---
+
+🔑 Important Parameters:
+--page_size
+-Sets the default number of records per page.
+
+--page_size_query_param
+-Allows the client to choose the number of records per page via a query parameter.
+
+--page_query_param
+-Defines the name of the query parameter used to select the page number (default is page).
+
+--max_page_size
+-Sets the maximum number of records allowed per page, useful to prevent misuse.
+
+--limit and offset
+-Used in LimitOffsetPagination to fetch records based on position rather than page number.
+
+--------
+# Create paginations.py file in the api
+
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
+
+class CustomPagination(PageNumberPagination):
+    page_size_query_param="page_size"
+    page_query_param="page-num"
+    max_page_size=1
+
+    def get_paginated_response(self, data):
+        return Response({
+            "next":self.get_next_link(),
+            "previous":self.get_previous_link(),
+            "count":self.page.paginator.count,
+            "page_size":self.page_size,
+            "result":data
+        })
+
+
+# Add this in views.py of api
+
+from .paginations import CustomPagination
+.
+.
+.
+class EmployeeViewSet(viewsets.ModelViewSet):
+    .
+    .
+    .
+    pagination_class=CustomPagination
+
+
+
+
+
+52.---Filtering---
+
+
+
+------------React.js Introduction & Installation---------------
+53. ---Components & Virtual DOM---
+
+--React Components:
+
+Components are the building blocks of a React application. They help break down the UI into smaller, reusable pieces. There are two main types:
+   - Functional Components: Simple functions that return JSX. They are lightweight and commonly used.
+   - Class Components: More traditional, they support additional features like local state and lifecycle methods.
+
+
+--Virtual DOM:
+  - The Virtual DOM is a lightweight copy of the actual DOM. When a change happens:
+  - React updates the Virtual DOM.
+  - It compares it with the previous version using a process called diffing.
+
+
+------------
+54. ---Install Node.js---
+
+Go to -> https://node.js.org/en/download/prebuilt-installer
+- Always install LTS(Long time support) version, select Windows, select ARM64
+
+Go to the command prompt and check if node.js and npm is installed.
+- node --version
+- npm --version
+
+
+-----------
+55.---Create React app using NPX---
+
+- Create a folder in Desktop(or anywhere)
+- Open that folder in terminal
+- npx create-react-app my-react-project
+- cd my-react-project
+- npm start
+  Now browser will be opened at http://localhost:3000/ and your react app is up and running
+
+
+So now as you have seen that npx took a lot of time to start the react app, so now we will use Vite to come out of this.
+
+--------------
+56. ---Create React project with Vite---
+
+- Delete that recently created my-react-project
+- npm create vite@latest
+- Enter project name i.e my-react-project
+- Select React as framework
+- Select JavaScript as Variant
+- cd my-react-project
+- npm install
+- npm run dev
+
+If npm run dev shows variant(bcoz of mismatched variant between Node Js and Vite) Error so try out this--
+
+- Delete that recently created my-react-project
+- npm create vite@5 my-react-project -- --template react
+- cd my-react-project
+- npm install
+- npm run dev
+
+
+- Now go to http://localhost:5173/
+---------------------
+
+57. ---Directory Structure---
+
+--Go to my-react-project
+
+📁 Project Structure Notes
+🔷 node_modules/
+Stores all installed packages (like React, Vite, etc.)
+
+Auto-generated by npm install
+
+🔷 public/
+Static files like images or favicons go here
+
+Contents are served as-is
+
+📄 vite.svg
+A sample SVG logo from Vite (can be used in the app or deleted)
+
+📁 src/ → Your main React code lives here!
+📄 App.jsx
+Main component of your app
+
+This is what the user sees on the screen
+
+📄 App.css
+Styling for App.jsx
+
+📄 index.css
+Global styles for the whole app
+
+📄 main.jsx
+Entry point of your React app
+
+Renders <App /> into the DOM
+
+📁 assets/
+Folder to store images, logos, or other assets
+
+🔧 Config & Other Files
+📄 index.html
+HTML template for your React app
+
+React gets injected into the <div id="root"> here
+
+📄 package.json
+Lists project info and dependencies (React, Vite, etc.)
+
+You run scripts from here (like npm run dev)
+
+📄 package-lock.json
+Auto-generated: Locks exact versions of packages
+
+📄 vite.config.js
+Configuration file for Vite (e.g., plugins, paths)
+
+📄 .eslintrc.cjs
+Configuration for ESLint (code quality checker)
+
+📄 .gitignore
+Tells Git which files/folders to ignore (like node_modules/)
+
+📄 README.md
+Info about your project (for documentation)
+
+
+-------------
+58. React- Seperate Operator- use statehooks with objects
+
+Empty Fragments-> <> </>
+
+Revise-> Context API, useContext Hook
+
+
+--------------------------------
+
+echo "# stock-prediction-portal" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/Aditya8821/stock-prediction-portal.git
+git push -u origin main
+
+
+
+
+
+
+---------------------------------------
+### Setting up jupyter notebook
+
+
+(base) PS C:\Users\Aditya-VIN2083> conda env list
+
+# conda environments:
+#
+base                 * C:\Users\Aditya-VIN2083\miniconda3
+env1                   C:\Users\Aditya-VIN2083\miniconda3\envs\env1
+stockenv               C:\Users\Aditya-VIN2083\miniconda3\envs\stockenv
+
+(base) PS C:\Users\Aditya-VIN2083> conda activate stockenv
+(stockenv) PS C:\Users\Aditya-VIN2083> cd .\Desktop\
+(stockenv) PS C:\Users\Aditya-VIN2083\Desktop> cd .\Stock-prediction-portal\
+(stockenv) PS C:\Users\Aditya-VIN2083\Desktop\Stock-prediction-portal> cd .\Resources\
+(stockenv) PS C:\Users\Aditya-VIN2083\Desktop\Stock-prediction-portal\Resources> jupyter notebook
+
+
+
+
+
+
